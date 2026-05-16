@@ -1,0 +1,11 @@
+{
+  "uid": "product_configurator_card",
+  "type": "card",
+  "config": {
+    "name": "SaaS Configurator",
+    "description": "Guided product configurator with auto-included items and compatible add-ons. Creates a draft Quote via the HubSpot Quotes API.",
+    "entrypoint": "/app/cards/product-configurator.tsx",
+    "location": "crm.record.tab",
+    "objectTypes": ["DEAL"]
+  }
+}

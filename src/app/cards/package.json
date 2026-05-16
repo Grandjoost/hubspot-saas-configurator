@@ -1,0 +1,9 @@
+{
+  "name": "hubspot-saas-configurator-cards",
+  "version": "0.1.0",
+  "license": "MIT",
+  "dependencies": {
+    "@hubspot/ui-extensions": "^0.12.3",
+    "react": "18.3.1"
+  }
+}

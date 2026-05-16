@@ -1,0 +1,36 @@
+{
+  "uid": "hubspot_saas_configurator_app",
+  "type": "app",
+  "config": {
+    "description": "Embed a SaaS-style guided product configurator on the Deal record. Sales reps pick a plan, get default-included items + compatible add-ons, then click \"Make a Quote\" to push a draft into HubSpot Quotes.",
+    "name": "noditch SaaS Configurator",
+    "distribution": "private",
+    "auth": {
+      "type": "static",
+      "requiredScopes": [
+        "oauth",
+        "crm.objects.deals.read",
+        "crm.objects.contacts.read",
+        "crm.objects.companies.read",
+        "crm.objects.owners.read",
+        "crm.objects.quotes.read",
+        "crm.objects.quotes.write",
+        "crm.objects.line_items.read",
+        "crm.objects.line_items.write"
+      ],
+      "optionalScopes": [],
+      "conditionallyRequiredScopes": []
+    },
+    "permittedUrls": {
+      "fetch": ["https://api.hubapi.com"],
+      "iframe": [],
+      "img": []
+    },
+    "support": {
+      "supportEmail": "joost@noditch.de",
+      "documentationUrl": "https://github.com/noditch/hubspot-saas-configurator",
+      "supportUrl": "https://github.com/noditch/hubspot-saas-configurator/issues",
+      "supportPhone": ""
+    }
+  }
+}
