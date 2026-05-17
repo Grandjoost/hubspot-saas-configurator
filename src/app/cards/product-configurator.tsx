@@ -57,8 +57,9 @@ function buildLineItems(
   billing: Billing
 ): LineItem[] {
   const items: LineItem[] = [];
+  const discount = plan.annualDiscount;
 
-  const planUnit = effectivePrice(plan.unitPrice, plan.isOneTime, billing);
+  const planUnit = effectivePrice(plan.unitPrice, plan.isOneTime, billing, discount);
   items.push({
     itemId: plan.id,
     name: annualName(plan.name, plan.isOneTime, billing),
@@ -73,7 +74,8 @@ function buildLineItems(
     const unit = effectivePrice(
       includedItem.unitPrice,
       includedItem.isOneTime,
-      billing
+      billing,
+      discount
     );
     items.push({
       itemId: includedItem.id,
@@ -90,7 +92,7 @@ function buildLineItems(
     if (qty <= 0) continue;
     const item = catalog.items.find((it) => it.id === itemId);
     if (!item) continue;
-    const unit = effectivePrice(item.unitPrice, item.isOneTime, billing);
+    const unit = effectivePrice(item.unitPrice, item.isOneTime, billing, discount);
     items.push({
       itemId: item.id,
       name: annualName(item.name, item.isOneTime, billing),
@@ -109,14 +111,6 @@ function ProductConfigurator({ context }: CardProps) {
   const dealId: string | undefined = context?.crm?.objectId
     ? String(context.crm.objectId)
     : undefined;
-
-  // Portal ID is only reliably available in the client context, not in the
-  // UIE serverless function — so we build the quote deep-link here.
-  const portalId: string | undefined =
-    context?.portal?.id ??
-    context?.account?.portalId ??
-    context?.account?.id;
-  const portalIdStr = portalId ? String(portalId) : undefined;
 
   const [step, setStep] = useState(0);
   const [planId, setPlanId] = useState<string | null>(null);
@@ -230,33 +224,22 @@ function ProductConfigurator({ context }: CardProps) {
     setCreating(true);
     setError(null);
     try {
+      // Send only the user's *intent* — the function rebuilds line items
+      // from its own catalog copy. Prevents browser-DevTools price tampering.
       const r = await hubspot.serverless('create_quote_function', {
         parameters: {
           dealId,
-          planName: selectedPlan.name,
-          currency: catalog.currency,
-          templateId: selectedTemplateId,
+          planId: selectedPlan.id,
           billing,
-          lineItems: lineItems.map((li) => ({
-            name: li.name,
-            description: li.description ?? '',
-            unitPrice: li.unitPrice,
-            quantity: li.quantity,
-            isOneTime: li.isOneTime,
-          })),
+          addOns,
+          templateId: selectedTemplateId,
         },
       });
       const body = (r as any)?.body ?? r;
       if (body?.error) {
         setError(body.error);
-      } else if (body?.quoteId) {
-        const quoteId = String(body.quoteId);
-        // EU portals: app-eu1.hubspot.com. US portals: app.hubspot.com.
-        // Change the host to "app" for US portals.
-        const quoteUrl = portalIdStr
-          ? `https://app-eu1.hubspot.com/quote/${portalIdStr}/editor/${quoteId}/content`
-          : `https://app-eu1.hubspot.com/l/quote/${quoteId}`;
-        setResult({ quoteId, quoteUrl });
+      } else if (body?.quoteId && body?.quoteUrl) {
+        setResult({ quoteId: String(body.quoteId), quoteUrl: String(body.quoteUrl) });
       } else {
         setError('Unexpected response from the backend.');
       }
@@ -295,6 +278,7 @@ function ProductConfigurator({ context }: CardProps) {
         items={includedItems}
         currency={catalog.currency}
         billing={billing}
+        planDiscount={selectedPlan?.annualDiscount}
       />
       <Divider />
       <AddOnPicker
@@ -302,6 +286,7 @@ function ProductConfigurator({ context }: CardProps) {
         selected={addOns}
         currency={catalog.currency}
         billing={billing}
+        planDiscount={selectedPlan?.annualDiscount}
         onToggle={handleToggleAddOn}
         onQtyChange={handleQtyChange}
       />
@@ -338,7 +323,15 @@ function ProductConfigurator({ context }: CardProps) {
     </Flex>
   );
 
-  const annualSavingsPercent = Math.round(ANNUAL_DISCOUNT * 100);
+  // Show plan-specific savings once a plan is selected; before that, advertise
+  // the highest available discount across all plans (best-foot-forward).
+  const annualSavingsPercent = Math.round(
+    (selectedPlan?.annualDiscount ??
+      Math.max(
+        ANNUAL_DISCOUNT,
+        ...catalog.plans.map((p) => p.annualDiscount ?? ANNUAL_DISCOUNT)
+      )) * 100
+  );
 
   return (
     <Flex direction="column" gap="md">
@@ -378,7 +371,11 @@ function ProductConfigurator({ context }: CardProps) {
       <Box>
         <Flex direction="row" gap="sm" align="center">
           <Toggle
-            label={`Bill annually — save ${annualSavingsPercent}%`}
+            label={
+              selectedPlan
+                ? `Bill annually — save ${annualSavingsPercent}%`
+                : `Bill annually — save up to ${annualSavingsPercent}%`
+            }
             checked={billing === 'annual'}
             onChange={(v) => setBilling(v ? 'annual' : 'monthly')}
           />

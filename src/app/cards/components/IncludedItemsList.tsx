@@ -7,9 +7,15 @@ interface Props {
   items: CatalogItem[];
   currency: string;
   billing: Billing;
+  planDiscount?: number;
 }
 
-export function IncludedItemsList({ items, currency, billing }: Props) {
+export function IncludedItemsList({
+  items,
+  currency,
+  billing,
+  planDiscount,
+}: Props) {
   if (items.length === 0) return null;
   return (
     <Box>
@@ -20,7 +26,12 @@ export function IncludedItemsList({ items, currency, billing }: Props) {
       <Box marginTop="sm">
         {items.map((item) => {
           const hasPrice = item.unitPrice > 0;
-          const price = effectivePrice(item.unitPrice, item.isOneTime, billing);
+          const price = effectivePrice(
+            item.unitPrice,
+            item.isOneTime,
+            billing,
+            planDiscount
+          );
           return (
             <Flex
               key={item.id}

@@ -2,18 +2,32 @@
  * create-quote — UI-Extension serverless function.
  *
  * Creates a DRAFT HubSpot CPQ Quote tied to the current Deal, populated
- * with the line items configured in the React extension.
+ * with line items rebuilt from the shared catalog. The client sends
+ * INTENT only ({ planId, billing, addOns }) — never prices — so a user
+ * can't tamper with figures via browser devtools.
  *
- * Implementation note: line items are created FIRST (no associations),
- * then the quote is created with ALL associations (deal, contact,
- * company, template, line items) in a single request. This matches the
- * pattern in HubSpot's CPQ docs and avoids template tier-pricing logic
- * overriding the line item prices.
+ * Flow:
+ *   1. Load deal context (contact, company, owner, currency) + account info
+ *      (uiDomain → region-aware deep-link).
+ *   2. Build line items from catalog.json + intent. Apply per-plan annual
+ *      discount with global fallback.
+ *   3. Create line items, then the CPQ quote with all associations.
+ *   4. No-op PATCH on each line item to trigger HubSpot's net-price recalc.
  */
 
 const axios = require('axios');
+// NOTE: this catalog must stay in sync with src/app/cards/catalog.json.
+// HubSpot's card and function bundlers each refuse imports from outside
+// their own directory, so the JSON has to live in both places. A CI sync
+// check is a sensible follow-up.
+const catalog = require('./catalog.json');
 
 const HS_API = 'https://api.hubapi.com';
+
+// Global fallback annual-billing discount; matches ANNUAL_DISCOUNT in
+// cards/components/format.ts. Per-plan `annualDiscount` (in catalog.json)
+// overrides this.
+const ANNUAL_DISCOUNT = 0.1;
 
 // HUBSPOT_DEFINED association type IDs — from the quote's perspective
 // (FROM = quote = 0-14)
@@ -25,9 +39,77 @@ const ASSOC = {
   QUOTE_TO_TEMPLATE: 286,
 };
 
+function effectivePrice(unitPrice, isOneTime, billing, planDiscount) {
+  if (isOneTime) return unitPrice;
+  if (billing === 'annual') {
+    const discount = typeof planDiscount === 'number' ? planDiscount : ANNUAL_DISCOUNT;
+    return Math.round(unitPrice * 12 * (1 - discount));
+  }
+  return unitPrice;
+}
+
+function annualName(name, isOneTime, billing) {
+  if (isOneTime || billing === 'monthly') return name;
+  return `${name} (annual)`;
+}
+
+function lookupItem(id) {
+  return catalog.items.find((it) => it.id === id);
+}
+
+function buildLineItems(plan, billing, addOns) {
+  const discount = plan.annualDiscount;
+  const items = [];
+
+  const planUnit = effectivePrice(plan.unitPrice, plan.isOneTime, billing, discount);
+  items.push({
+    name: annualName(plan.name, plan.isOneTime, billing),
+    description: plan.description || '',
+    unitPrice: planUnit,
+    quantity: 1,
+    isOneTime: plan.isOneTime,
+  });
+
+  for (const id of plan.defaultIncludedItemIds || []) {
+    const it = lookupItem(id);
+    if (!it) continue;
+    const unit = effectivePrice(it.unitPrice, it.isOneTime, billing, discount);
+    items.push({
+      name: annualName(it.name, it.isOneTime, billing),
+      description: it.description || '',
+      unitPrice: unit,
+      quantity: 1,
+      isOneTime: it.isOneTime,
+    });
+  }
+
+  const compatible = new Set(plan.compatibleAddOnIds || []);
+  for (const [itemId, rawQty] of Object.entries(addOns || {})) {
+    const qty = Number(rawQty);
+    if (!qty || qty <= 0) continue;
+    // Reject incompatible add-ons — defence in depth.
+    if (!compatible.has(itemId)) continue;
+    const it = lookupItem(itemId);
+    if (!it) continue;
+    const clampedQty = Math.min(
+      Math.max(qty, it.minQty ?? 1),
+      it.maxQty ?? 999
+    );
+    const unit = effectivePrice(it.unitPrice, it.isOneTime, billing, discount);
+    items.push({
+      name: annualName(it.name, it.isOneTime, billing),
+      description: it.description || '',
+      unitPrice: unit,
+      quantity: clampedQty,
+      isOneTime: it.isOneTime,
+    });
+  }
+
+  return items;
+}
+
 exports.main = async (context = {}) => {
-  const { dealId, planName, currency, lineItems, templateId, billing } =
-    context.parameters || {};
+  const { dealId, planId, billing, addOns, templateId } = context.parameters || {};
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN;
   const recurringFrequency = billing === 'annual' ? 'annually' : 'monthly';
 
@@ -43,8 +125,13 @@ exports.main = async (context = {}) => {
   if (!dealId) {
     return { statusCode: 200, body: { error: 'Parameter "dealId" is missing.' } };
   }
-  if (!Array.isArray(lineItems) || lineItems.length === 0) {
-    return { statusCode: 200, body: { error: 'Parameter "lineItems" is empty.' } };
+
+  const plan = catalog.plans.find((p) => p.id === planId);
+  if (!plan) {
+    return {
+      statusCode: 200,
+      body: { error: `Unknown planId "${planId}".` },
+    };
   }
 
   const headers = {
@@ -54,8 +141,17 @@ exports.main = async (context = {}) => {
   const api = axios.create({ baseURL: HS_API, headers, timeout: 20000 });
 
   try {
-    // 0. Pull deal context: first contact + company + owner
-    const [contactAssoc, companyAssoc, dealRes] = await Promise.all([
+    // 0. Build line items from catalog + intent.
+    const lineItems = buildLineItems(plan, billing, addOns);
+    if (lineItems.length === 0) {
+      return {
+        statusCode: 200,
+        body: { error: 'No line items resolved from the given plan/add-ons.' },
+      };
+    }
+
+    // 1. Pull deal context + account info in parallel.
+    const [contactAssoc, companyAssoc, dealRes, accountRes] = await Promise.all([
       api
         .get(
           `/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/contacts?limit=1`
@@ -68,9 +164,10 @@ exports.main = async (context = {}) => {
         .catch(() => null),
       api
         .get(
-          `/crm/v3/objects/deals/${encodeURIComponent(dealId)}?properties=hubspot_owner_id`
+          `/crm/v3/objects/deals/${encodeURIComponent(dealId)}?properties=hubspot_owner_id,deal_currency_code`
         )
         .catch(() => null),
+      api.get('/account-info/v3/details').catch(() => null),
     ]);
     const contactId = contactAssoc?.data?.results?.[0]?.toObjectId
       ? String(contactAssoc.data.results[0].toObjectId)
@@ -79,6 +176,12 @@ exports.main = async (context = {}) => {
       ? String(companyAssoc.data.results[0].toObjectId)
       : null;
     const ownerId = dealRes?.data?.properties?.hubspot_owner_id || null;
+    const dealCurrency = dealRes?.data?.properties?.deal_currency_code || null;
+
+    const account = accountRes?.data || {};
+    // uiDomain: "app-eu1.hubspot.com" (EU), "app.hubspot.com" (NA), etc.
+    const uiDomain = account.uiDomain || 'app.hubspot.com';
+    const portalId = account.portalId || null;
 
     if (!contactId) {
       return {
@@ -108,19 +211,19 @@ exports.main = async (context = {}) => {
       }
     }
 
-    // 1. Create each line item WITHOUT associations.
-    // We pass: explicit price+quantity, computed amount (net price),
-    // hs_position_on_quote (1-based, stable ordering), and zero-discount
-    // fields so HubSpot doesn't fall back to "calculated" defaults.
+    // 2. Create each line item WITHOUT associations.
+    // explicit price+quantity, computed amount, hs_position_on_quote
+    // (1-based), zero-discount fields so HubSpot doesn't fall back to
+    // "calculated" defaults.
     const lineItemIds = [];
     for (let i = 0; i < lineItems.length; i++) {
       const li = lineItems[i];
-      const unitPrice = Number(li.unitPrice ?? 0);
-      const quantity = Number(li.quantity ?? 1);
+      const unitPrice = Number(li.unitPrice);
+      const quantity = Number(li.quantity);
       const total = unitPrice * quantity;
       const properties = {
-        name: String(li.name || '').slice(0, 200),
-        description: String(li.description || '').slice(0, 1000),
+        name: String(li.name).slice(0, 200),
+        description: String(li.description).slice(0, 1000),
         price: unitPrice,
         quantity: quantity,
         amount: total,
@@ -143,12 +246,14 @@ exports.main = async (context = {}) => {
       lineItemIds.push(String(liRes.data.id));
     }
 
-    // 2. Create the CPQ Quote with ALL associations in one request.
+    // 3. Create the CPQ Quote with ALL associations in one request.
     const today = new Date();
     const expiration = new Date(today);
     expiration.setDate(expiration.getDate() + 30);
-    const safePlan = (planName || 'SaaS bundle').slice(0, 80);
+    const safePlan = plan.name.slice(0, 80);
     const isoDate = today.toISOString().slice(0, 10);
+    // Currency precedence: deal currency → catalog default → USD.
+    const quoteCurrency = dealCurrency || catalog.currency || 'USD';
 
     const associations = [
       {
@@ -197,7 +302,6 @@ exports.main = async (context = {}) => {
             },
           ]
         : []),
-      // All line items as associations FROM the quote
       ...lineItemIds.map((id) => ({
         to: { id },
         types: [
@@ -214,7 +318,7 @@ exports.main = async (context = {}) => {
         hs_title: `${safePlan} — ${isoDate}`,
         hs_template_type: 'CPQ_QUOTE',
         hs_expiration_date: expiration.toISOString(),
-        hs_currency: currency || 'USD',
+        hs_currency: quoteCurrency,
         hs_language: 'en',
         hs_locale: 'en-US',
         ...senderProps,
@@ -223,7 +327,7 @@ exports.main = async (context = {}) => {
     });
     const quoteId = quoteRes.data.id;
 
-    // 3. Touch each line item with a no-op PATCH. This is the documented
+    // 4. Touch each line item with a no-op PATCH. This is the documented
     // workaround for HubSpot's CPQ engine not auto-calculating net prices
     // on API-created line items — a write-trigger fires the recalc that
     // would otherwise only happen when a user opens & saves the row in the
@@ -238,9 +342,14 @@ exports.main = async (context = {}) => {
       )
     );
 
+    // 5. Build region-aware deep-link to the CPQ editor.
+    const quoteUrl = portalId
+      ? `https://${uiDomain}/quote/${portalId}/editor/${quoteId}/content`
+      : `https://${uiDomain}/l/quote/${quoteId}`;
+
     return {
       statusCode: 200,
-      body: { quoteId: String(quoteId) },
+      body: { quoteId: String(quoteId), quoteUrl },
     };
   } catch (err) {
     const detail =

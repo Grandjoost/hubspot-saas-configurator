@@ -18,6 +18,9 @@ export interface Plan {
   isOneTime: boolean;
   features?: string[];
   recommended?: boolean;
+  /** Annual-billing discount on recurring items for this plan. Falls back
+   * to the global ANNUAL_DISCOUNT if absent. */
+  annualDiscount?: number;
   defaultIncludedItemIds: string[];
   compatibleAddOnIds: string[];
 }

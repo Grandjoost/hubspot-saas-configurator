@@ -21,6 +21,7 @@ interface Props {
   selected: SelectedAddOns;
   currency: string;
   billing: Billing;
+  planDiscount?: number;
   onToggle: (itemId: string, on: boolean) => void;
   onQtyChange: (itemId: string, qty: number) => void;
 }
@@ -30,6 +31,7 @@ export function AddOnPicker({
   selected,
   currency,
   billing,
+  planDiscount,
   onToggle,
   onQtyChange,
 }: Props) {
@@ -75,7 +77,12 @@ export function AddOnPicker({
                     <Flex direction="column" align="end">
                       <Text format={{ fontWeight: 'bold' }}>
                         {formatPrice(
-                          effectivePrice(item.unitPrice, item.isOneTime, billing),
+                          effectivePrice(
+                            item.unitPrice,
+                            item.isOneTime,
+                            billing,
+                            planDiscount
+                          ),
                           currency
                         )}
                       </Text>

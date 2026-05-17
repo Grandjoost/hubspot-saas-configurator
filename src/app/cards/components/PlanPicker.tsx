@@ -37,7 +37,12 @@ export function PlanPicker({
         const mutedColor = isDimmed ? 'medium' : undefined;
         const isRecommended = !!plan.recommended;
         const accentColor = isRecommended && !isDimmed ? 'success' : mutedColor;
-        const price = effectivePrice(plan.unitPrice, plan.isOneTime, billing);
+        const price = effectivePrice(
+          plan.unitPrice,
+          plan.isOneTime,
+          billing,
+          plan.annualDiscount
+        );
 
         return (
           <Tile key={plan.id} flush>

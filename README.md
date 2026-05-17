@@ -14,10 +14,13 @@ Built as an open-source reference implementation for a pattern HubSpot itself re
 - **3-step wizard** (Select plan → Add-ons → Review & create) with vertical `StepIndicator`
 - **Plan picker** — tile-based, "Most popular" badge, feature bullets per plan
 - **Auto-included items** + **compatible add-ons** with `Toggle` + `StepperInput` for quantities
-- **Monthly / Annual billing toggle** with configurable discount (10% by default — HubSpot's convention)
+- **Monthly / Annual billing toggle** with **per-plan** discount (10% / 15% / 20% in the sample catalog, global fallback configurable)
 - **Quote-template selector** — auto-populates from the portal's CPQ templates, defaults to `HUBSPOT_QUOTE_TEMPLATE_ID` if set
 - **One-click draft quote** — creates a `CPQ_QUOTE` with line items, contact, company, seller (deal owner), and template association
 - **`recurringbillingfrequency`** is set per line item so the quote shows the correct cadence
+- **Server-side price authority** — the React extension sends only the user's *intent* (plan + add-ons + billing mode); the serverless function rebuilds line items from its own catalog copy, so prices can't be tampered with via browser devtools
+- **Region-aware** — the serverless function reads the portal's `uiDomain` from `/account-info/v3/details` and builds the deep-link accordingly (works on EU, NA, AU portals without code changes)
+- **Deal currency inheritance** — the quote inherits `deal_currency_code` from the deal when set, falling back to the catalog default
 
 ## Quick start
 
@@ -83,41 +86,43 @@ You can find the ID by opening the extension after step 4 — the template dropd
 
 Open a **Deal record** that has at least one contact associated → the **"SaaS Configurator"** card appears on the tab you placed it on. Walk the wizard, toggle annual billing if you like, click **"Make a quote in HubSpot"** — a draft Quote opens in the CPQ editor.
 
-> **Note on regions:** the success-state "Open quote" link defaults to `app-eu1.hubspot.com`. If you run on a US portal, change the host to `app.hubspot.com` in [src/app/cards/product-configurator.tsx](src/app/cards/product-configurator.tsx) where the URL is built.
 
 ## Customizing the catalog
 
-The wizard reads its data from [src/app/cards/catalog.json](src/app/cards/catalog.json):
+The wizard reads its data from `catalog.json`, which lives in **two places** because HubSpot bundles the card and the function separately and neither bundler accepts imports from outside its own directory:
 
-- `plans[]` — top-level offerings. Each has `unitPrice` (monthly), `features[]`, `defaultIncludedItemIds`, `compatibleAddOnIds`, optional `recommended: true` for the "Most popular" badge.
+- [src/app/cards/catalog.json](src/app/cards/catalog.json) — consumed by the React extension for display
+- [src/app/functions/catalog.json](src/app/functions/catalog.json) — consumed by the serverless function for the canonical price computation
+
+**Keep them in sync** when changing the catalog. (A CI sync-check is a sensible follow-up PR.)
+
+Shape:
+
+- `plans[]` — top-level offerings. Each has `unitPrice` (monthly), `features[]`, `defaultIncludedItemIds`, `compatibleAddOnIds`, optional `recommended: true` for the "Most popular" badge, optional `annualDiscount` (decimal, e.g. `0.15` for 15%) to override the global default.
 - `items[]` — pool of included items + add-ons that plans reference by id. Use `isOneTime: true` for setup/training fees, `isQuantifiable: true` with `min/max/step` for stepper-driven add-ons (e.g. seats).
 
-The React extension reads `catalog.json` at build time, so no other code changes are needed for a simple swap. Bigger ambitions? Replace the import with a call to the HubSpot Products API or a CMS.
+Bigger ambitions? Replace the JSON import on both sides with a call to the HubSpot Products API or a HubDB table.
 
 ## Annual discount
 
-The annual discount is a flat percentage applied to all recurring line items (monthly × 12 × (1 − discount)). One-time items are unaffected.
+Each plan may carry its own `annualDiscount` (decimal). Plans without one fall back to the global `ANNUAL_DISCOUNT` constant — `0.1` by default — defined in both [src/app/cards/components/format.ts](src/app/cards/components/format.ts) (client, for display) and [src/app/functions/create-quote.js](src/app/functions/create-quote.js) (server, for the line items actually written).
 
-Configurable in [src/app/cards/components/format.ts](src/app/cards/components/format.ts):
-
-```ts
-export const ANNUAL_DISCOUNT = 0.1; // 10%
-```
-
-The `(annual)` suffix is appended to each recurring line item's name, and `recurringbillingfrequency = 'annually'` is set on the line item so HubSpot displays the correct cadence.
+Recurring items in annual mode are priced at `monthly × 12 × (1 − discount)`, the line-item name is suffixed with `(annual)`, and `recurringbillingfrequency = 'annually'` is set so HubSpot displays the correct cadence. One-time items are charged as-is.
 
 ## How "Make a quote" actually works
 
-1. Extension collects `dealId` from the card context + the configured line items + the billing mode.
-2. Calls the `create_quote_function` serverless with `{ dealId, planName, currency, billing, templateId, lineItems[] }`.
+1. Extension collects `dealId` from the card context + the user's *intent*: `{ planId, billing, addOns, templateId }`. No prices, no line items — just the choices.
+2. Calls the `create_quote_function` serverless with that payload.
 3. The function:
-   1. Fetches the deal's first **contact** + **company** + **owner** in parallel.
-   2. Looks up the owner (becomes `hs_sender_*` on the quote).
-   3. Creates each **line item** with explicit `price`, `amount`, `hs_pre_discount_amount`, `hs_total_discount: 0`, `discount: 0`, `hs_position_on_quote`, and (for recurring items) `recurringbillingfrequency`.
-   4. Creates the **CPQ quote** with `hs_template_type: 'CPQ_QUOTE'` and a single association payload covering deal, contact, company, template, and all line items.
-   5. PATCHes each line item with a no-op `hs_object_source: 'INTEGRATION'` — this triggers HubSpot's net-price recalculation that otherwise only fires when a user opens & saves the row in the quote editor UI.
-   6. Returns `{ quoteId }`.
-4. Extension builds the editor deep-link from `context.portal.id` + the returned `quoteId` and renders a success state.
+   1. Resolves the plan from its own `catalog.json` and rejects unknown IDs or incompatible add-ons.
+   2. Fetches the deal's first **contact**, **company**, **owner**, and `deal_currency_code` plus the portal's `/account-info/v3/details` in parallel.
+   3. Looks up the owner (becomes `hs_sender_*` on the quote).
+   4. **Rebuilds line items** from catalog + intent, applying the plan-specific (or fallback) annual discount.
+   5. Creates each **line item** with explicit `price`, `amount`, `hs_pre_discount_amount`, `hs_total_discount: 0`, `discount: 0`, `hs_position_on_quote`, and (for recurring items) `recurringbillingfrequency`.
+   6. Creates the **CPQ quote** with `hs_template_type: 'CPQ_QUOTE'`, `hs_currency` from the deal, and a single association payload covering deal, contact, company, template, and all line items.
+   7. PATCHes each line item with a no-op `hs_object_source: 'INTEGRATION'` — this triggers HubSpot's net-price recalculation that otherwise only fires when a user opens & saves the row in the quote editor UI.
+   8. Builds a region-aware deep-link from the portal's `uiDomain` and returns `{ quoteId, quoteUrl }`.
+4. Extension renders a success state with the link.
 
 From there, the sales rep takes over in the native CPQ editor: tweak discounts, add signatures, route for approval, send.
 
@@ -134,13 +139,14 @@ hubspot-saas-configurator/
         ├── functions/
         │   ├── create-quote.js                   ← creates the CPQ quote + line items
         │   ├── create-quote-hsmeta.json          ← declares secret keys
+        │   ├── catalog.json                      ← server-side copy (must match cards/catalog.json)
         │   ├── list-templates.js                 ← fetches CPQ templates for the dropdown
         │   ├── list-templates-hsmeta.json
         │   └── package.json
         └── cards/
             ├── product-configurator-hsmeta.json
             ├── product-configurator.tsx          ← React extension entry
-            ├── catalog.json                      ← ← YOUR catalog goes here
+            ├── catalog.json                      ← client-side copy (must match functions/catalog.json)
             ├── package.json
             └── components/
                 ├── PlanPicker.tsx
@@ -166,8 +172,7 @@ Declared in [src/app/app-hsmeta.json](src/app/app-hsmeta.json):
 
 - **Not** a replacement for HubSpot CPQ — it's an *entry point* into HubSpot Quotes.
 - **Not** a generic product catalog management system — `catalog.json` is a static config file by design.
-- **Not** multi-currency-aware out of the box (single currency per catalog).
-- **Not** region-detecting — the open-quote deep-link assumes `app-eu1.hubspot.com`. One-line change for US portals.
+- **Not** a full multi-currency story — the deal currency is honored when set, but the catalog itself is single-currency. Multi-currency pricing tables are a fork-and-extend exercise.
 
 ## Contributing & forking
 

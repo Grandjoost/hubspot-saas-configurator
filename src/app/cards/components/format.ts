@@ -1,7 +1,8 @@
 export type Billing = 'monthly' | 'annual';
 
 /**
- * Annual billing discount applied to recurring line items.
+ * Global fallback annual-billing discount, applied to recurring items when
+ * the active plan doesn't define its own `annualDiscount`.
  * Mirrors HubSpot's own pricing convention ("save 10% with annual billing").
  */
 export const ANNUAL_DISCOUNT = 0.1;
@@ -23,18 +24,21 @@ export function priceSuffix(isOneTime: boolean, billing: Billing = 'monthly'): s
 }
 
 /**
- * Effective unit price for a line item, given the chosen billing cadence.
- * Recurring items in annual mode → monthly × 12 × (1 − ANNUAL_DISCOUNT).
+ * Effective unit price for a line item, given the chosen billing cadence
+ * and the per-plan discount (with global fallback).
+ * Recurring items in annual mode → monthly × 12 × (1 − discount).
  * One-time items are always charged as-is.
  */
 export function effectivePrice(
   unitPrice: number,
   isOneTime: boolean,
-  billing: Billing
+  billing: Billing,
+  planDiscount?: number
 ): number {
   if (isOneTime) return unitPrice;
   if (billing === 'annual') {
-    return Math.round(unitPrice * 12 * (1 - ANNUAL_DISCOUNT));
+    const discount = planDiscount ?? ANNUAL_DISCOUNT;
+    return Math.round(unitPrice * 12 * (1 - discount));
   }
   return unitPrice;
 }
