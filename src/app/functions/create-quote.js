@@ -25,24 +25,11 @@ const ASSOC = {
   QUOTE_TO_TEMPLATE: 286,
 };
 
-function deriveQuoteUrl(portalId, quoteId) {
-  if (portalId) {
-    return `https://app.hubspot.com/contacts/${portalId}/record/0-14/${quoteId}`;
-  }
-  return `https://app.hubspot.com/l/quote/${quoteId}`;
-}
-
 exports.main = async (context = {}) => {
-  const { dealId, planName, currency, lineItems, templateId } =
+  const { dealId, planName, currency, lineItems, templateId, billing } =
     context.parameters || {};
   const token = process.env.PRIVATE_APP_ACCESS_TOKEN;
-
-  const portalId =
-    context?.account?.id ||
-    context?.portal?.id ||
-    context?.hub?.id ||
-    process.env.HUBSPOT_PORTAL_ID ||
-    null;
+  const recurringFrequency = billing === 'annual' ? 'annually' : 'monthly';
 
   if (!token) {
     return {
@@ -142,6 +129,14 @@ exports.main = async (context = {}) => {
         discount: 0,
         hs_position_on_quote: i + 1,
       };
+      // Recurring items carry an explicit billing frequency so the quote
+      // shows "annually" / "monthly" next to each line. One-time items get
+      // no frequency. We deliberately omit hs_term_in_months — it triggers
+      // HubSpot's tier-pricing recalculation, which can override the
+      // explicit price we just set.
+      if (!li.isOneTime) {
+        properties.recurringbillingfrequency = recurringFrequency;
+      }
       const liRes = await api.post('/crm/v3/objects/line_items', {
         properties,
       });
@@ -245,7 +240,7 @@ exports.main = async (context = {}) => {
 
     return {
       statusCode: 200,
-      body: { quoteId: String(quoteId), quoteUrl: deriveQuoteUrl(portalId, quoteId) },
+      body: { quoteId: String(quoteId) },
     };
   } catch (err) {
     const detail =

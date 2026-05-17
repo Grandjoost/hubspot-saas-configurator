@@ -13,14 +13,15 @@ import {
   TableRow,
 } from '@hubspot/ui-extensions';
 import type { LineItem } from './types';
-import { formatPrice, priceSuffix } from './format';
+import { formatPrice, priceSuffix, type Billing } from './format';
 
 interface Props {
   lineItems: LineItem[];
   currency: string;
+  billing: Billing;
 }
 
-export function OrderSummary({ lineItems, currency }: Props) {
+export function OrderSummary({ lineItems, currency, billing }: Props) {
   const recurringTotal = lineItems
     .filter((li) => !li.isOneTime)
     .reduce((sum, li) => sum + li.totalPrice, 0);
@@ -59,7 +60,7 @@ export function OrderSummary({ lineItems, currency }: Props) {
                       {formatPrice(li.unitPrice, currency)}
                     </Text>
                     <Text format={{ color: 'medium' }}>
-                      {priceSuffix(li.isOneTime)}
+                      {priceSuffix(li.isOneTime, billing)}
                     </Text>
                   </Flex>
                 </TableCell>
@@ -74,7 +75,9 @@ export function OrderSummary({ lineItems, currency }: Props) {
           <TableFooter>
             <TableRow>
               <TableCell colSpan={2}>
-                <Text format={{ fontWeight: 'bold' }}>Monthly recurring</Text>
+                <Text format={{ fontWeight: 'bold' }}>
+                  {billing === 'annual' ? 'Annual recurring' : 'Monthly recurring'}
+                </Text>
               </TableCell>
               <TableCell align="right">
                 <Text format={{ fontWeight: 'bold' }}>

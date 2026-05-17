@@ -1,14 +1,15 @@
 import React from 'react';
 import { Box, Flex, Text, Heading } from '@hubspot/ui-extensions';
 import type { CatalogItem } from './types';
-import { formatPrice, priceSuffix } from './format';
+import { effectivePrice, formatPrice, priceSuffix, type Billing } from './format';
 
 interface Props {
   items: CatalogItem[];
   currency: string;
+  billing: Billing;
 }
 
-export function IncludedItemsList({ items, currency }: Props) {
+export function IncludedItemsList({ items, currency, billing }: Props) {
   if (items.length === 0) return null;
   return (
     <Box>
@@ -19,6 +20,7 @@ export function IncludedItemsList({ items, currency }: Props) {
       <Box marginTop="sm">
         {items.map((item) => {
           const hasPrice = item.unitPrice > 0;
+          const price = effectivePrice(item.unitPrice, item.isOneTime, billing);
           return (
             <Flex
               key={item.id}
@@ -41,7 +43,7 @@ export function IncludedItemsList({ items, currency }: Props) {
               </Flex>
               {hasPrice && (
                 <Text format={{ color: 'medium' }}>
-                  {formatPrice(item.unitPrice, currency)} {priceSuffix(item.isOneTime)}
+                  {formatPrice(price, currency)} {priceSuffix(item.isOneTime, billing)}
                 </Text>
               )}
             </Flex>

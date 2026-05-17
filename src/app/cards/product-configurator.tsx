@@ -12,6 +12,7 @@ import {
   Select,
   StepIndicator,
   Text,
+  Toggle,
 } from '@hubspot/ui-extensions';
 
 import catalogData from './catalog.json';
@@ -29,6 +30,7 @@ import { IncludedItemsList } from './components/IncludedItemsList';
 import { AddOnPicker } from './components/AddOnPicker';
 import { OrderSummary } from './components/OrderSummary';
 import { SuccessState } from './components/SuccessState';
+import { ANNUAL_DISCOUNT, effectivePrice, type Billing } from './components/format';
 
 const catalog = catalogData as Catalog;
 
@@ -44,28 +46,43 @@ function lookupItems(ids: string[]): CatalogItem[] {
     .filter((it): it is CatalogItem => Boolean(it));
 }
 
-function buildLineItems(plan: Plan, addOns: SelectedAddOns): LineItem[] {
+function annualName(name: string, isOneTime: boolean, billing: Billing): string {
+  if (isOneTime || billing === 'monthly') return name;
+  return `${name} (annual)`;
+}
+
+function buildLineItems(
+  plan: Plan,
+  addOns: SelectedAddOns,
+  billing: Billing
+): LineItem[] {
   const items: LineItem[] = [];
 
+  const planUnit = effectivePrice(plan.unitPrice, plan.isOneTime, billing);
   items.push({
     itemId: plan.id,
-    name: plan.name,
+    name: annualName(plan.name, plan.isOneTime, billing),
     description: plan.description,
-    unitPrice: plan.unitPrice,
+    unitPrice: planUnit,
     quantity: 1,
     isOneTime: plan.isOneTime,
-    totalPrice: plan.unitPrice,
+    totalPrice: planUnit,
   });
 
   for (const includedItem of lookupItems(plan.defaultIncludedItemIds)) {
+    const unit = effectivePrice(
+      includedItem.unitPrice,
+      includedItem.isOneTime,
+      billing
+    );
     items.push({
       itemId: includedItem.id,
-      name: includedItem.name,
+      name: annualName(includedItem.name, includedItem.isOneTime, billing),
       description: includedItem.description,
-      unitPrice: includedItem.unitPrice,
+      unitPrice: unit,
       quantity: 1,
       isOneTime: includedItem.isOneTime,
-      totalPrice: includedItem.unitPrice,
+      totalPrice: unit,
     });
   }
 
@@ -73,14 +90,15 @@ function buildLineItems(plan: Plan, addOns: SelectedAddOns): LineItem[] {
     if (qty <= 0) continue;
     const item = catalog.items.find((it) => it.id === itemId);
     if (!item) continue;
+    const unit = effectivePrice(item.unitPrice, item.isOneTime, billing);
     items.push({
       itemId: item.id,
-      name: item.name,
+      name: annualName(item.name, item.isOneTime, billing),
       description: item.description,
-      unitPrice: item.unitPrice,
+      unitPrice: unit,
       quantity: qty,
       isOneTime: item.isOneTime,
-      totalPrice: item.unitPrice * qty,
+      totalPrice: unit * qty,
     });
   }
 
@@ -92,16 +110,24 @@ function ProductConfigurator({ context }: CardProps) {
     ? String(context.crm.objectId)
     : undefined;
 
+  // Portal ID is only reliably available in the client context, not in the
+  // UIE serverless function — so we build the quote deep-link here.
+  const portalId: string | undefined =
+    context?.portal?.id ??
+    context?.account?.portalId ??
+    context?.account?.id;
+  const portalIdStr = portalId ? String(portalId) : undefined;
+
   const [step, setStep] = useState(0);
   const [planId, setPlanId] = useState<string | null>(null);
   const [addOns, setAddOns] = useState<SelectedAddOns>({});
+  const [billing, setBilling] = useState<Billing>('monthly');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<QuoteResult | null>(null);
   const [templates, setTemplates] = useState<
     Array<{ id: string; name: string; type: string }> | null
   >(null);
-  const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     null
   );
@@ -145,8 +171,8 @@ function ProductConfigurator({ context }: CardProps) {
   }, [selectedPlan]);
 
   const lineItems = useMemo<LineItem[]>(
-    () => (selectedPlan ? buildLineItems(selectedPlan, addOns) : []),
-    [selectedPlan, addOns]
+    () => (selectedPlan ? buildLineItems(selectedPlan, addOns, billing) : []),
+    [selectedPlan, addOns, billing]
   );
 
   const canAdvanceFromStep0 = !!selectedPlan;
@@ -210,6 +236,7 @@ function ProductConfigurator({ context }: CardProps) {
           planName: selectedPlan.name,
           currency: catalog.currency,
           templateId: selectedTemplateId,
+          billing,
           lineItems: lineItems.map((li) => ({
             name: li.name,
             description: li.description ?? '',
@@ -222,8 +249,14 @@ function ProductConfigurator({ context }: CardProps) {
       const body = (r as any)?.body ?? r;
       if (body?.error) {
         setError(body.error);
-      } else if (body?.quoteId && body?.quoteUrl) {
-        setResult({ quoteId: body.quoteId, quoteUrl: body.quoteUrl });
+      } else if (body?.quoteId) {
+        const quoteId = String(body.quoteId);
+        // EU portals: app-eu1.hubspot.com. US portals: app.hubspot.com.
+        // Change the host to "app" for US portals.
+        const quoteUrl = portalIdStr
+          ? `https://app-eu1.hubspot.com/quote/${portalIdStr}/editor/${quoteId}/content`
+          : `https://app-eu1.hubspot.com/l/quote/${quoteId}`;
+        setResult({ quoteId, quoteUrl });
       } else {
         setError('Unexpected response from the backend.');
       }
@@ -238,25 +271,9 @@ function ProductConfigurator({ context }: CardProps) {
     setStep(0);
     setPlanId(null);
     setAddOns({});
+    setBilling('monthly');
     setError(null);
     setResult(null);
-  };
-
-  const handleLoadTemplates = async () => {
-    setTemplatesLoading(true);
-    try {
-      const r = await hubspot.serverless('list_templates_function', {});
-      const body = (r as any)?.body ?? r;
-      if (body?.error) {
-        setError(body.error);
-      } else if (Array.isArray(body?.templates)) {
-        setTemplates(body.templates);
-      }
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to load templates.');
-    } finally {
-      setTemplatesLoading(false);
-    }
   };
 
   // --- step content renderers ---
@@ -265,6 +282,7 @@ function ProductConfigurator({ context }: CardProps) {
       plans={catalog.plans}
       selectedPlanId={planId}
       currency={catalog.currency}
+      billing={billing}
       onSelect={(id) => {
         handleSelectPlan(id);
       }}
@@ -273,12 +291,17 @@ function ProductConfigurator({ context }: CardProps) {
 
   const renderStep1 = () => (
     <Flex direction="column" gap="lg">
-      <IncludedItemsList items={includedItems} currency={catalog.currency} />
+      <IncludedItemsList
+        items={includedItems}
+        currency={catalog.currency}
+        billing={billing}
+      />
       <Divider />
       <AddOnPicker
         items={compatibleAddOns}
         selected={addOns}
         currency={catalog.currency}
+        billing={billing}
         onToggle={handleToggleAddOn}
         onQtyChange={handleQtyChange}
       />
@@ -287,7 +310,11 @@ function ProductConfigurator({ context }: CardProps) {
 
   const renderStep2 = () => (
     <Flex direction="column" gap="lg">
-      <OrderSummary lineItems={lineItems} currency={catalog.currency} />
+      <OrderSummary
+        lineItems={lineItems}
+        currency={catalog.currency}
+        billing={billing}
+      />
 
       {error && (
         <Alert variant="danger" title="Error">
@@ -310,6 +337,8 @@ function ProductConfigurator({ context }: CardProps) {
       {result && <SuccessState result={result} onReset={handleReset} />}
     </Flex>
   );
+
+  const annualSavingsPercent = Math.round(ANNUAL_DISCOUNT * 100);
 
   return (
     <Flex direction="column" gap="md">
@@ -344,6 +373,22 @@ function ProductConfigurator({ context }: CardProps) {
           />
         </Box>
       )}
+
+      {/* Billing cadence */}
+      <Box>
+        <Flex direction="row" gap="sm" align="center">
+          <Toggle
+            label={`Bill annually — save ${annualSavingsPercent}%`}
+            checked={billing === 'annual'}
+            onChange={(v) => setBilling(v ? 'annual' : 'monthly')}
+          />
+          <Text format={{ color: 'medium' }}>
+            {billing === 'annual'
+              ? `Annual contract — ${annualSavingsPercent}% off recurring items.`
+              : 'Monthly billing. Toggle to switch to annual.'}
+          </Text>
+        </Flex>
+      </Box>
 
       <Divider />
 

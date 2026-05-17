@@ -10,16 +10,23 @@ import {
   Divider,
 } from '@hubspot/ui-extensions';
 import type { Plan } from './types';
-import { formatPrice, priceSuffix } from './format';
+import { effectivePrice, formatPrice, priceSuffix, type Billing } from './format';
 
 interface Props {
   plans: Plan[];
   selectedPlanId: string | null;
   currency: string;
+  billing: Billing;
   onSelect: (planId: string) => void;
 }
 
-export function PlanPicker({ plans, selectedPlanId, currency, onSelect }: Props) {
+export function PlanPicker({
+  plans,
+  selectedPlanId,
+  currency,
+  billing,
+  onSelect,
+}: Props) {
   const aPlanIsSelected = selectedPlanId !== null;
 
   return (
@@ -30,6 +37,7 @@ export function PlanPicker({ plans, selectedPlanId, currency, onSelect }: Props)
         const mutedColor = isDimmed ? 'medium' : undefined;
         const isRecommended = !!plan.recommended;
         const accentColor = isRecommended && !isDimmed ? 'success' : mutedColor;
+        const price = effectivePrice(plan.unitPrice, plan.isOneTime, billing);
 
         return (
           <Tile key={plan.id} flush>
@@ -73,10 +81,10 @@ export function PlanPicker({ plans, selectedPlanId, currency, onSelect }: Props)
                   }}
                   inline
                 >
-                  {formatPrice(plan.unitPrice, currency)}
+                  {formatPrice(price, currency)}
                 </Text>
                 <Text inline format={{ color: 'medium' }}>
-                  {priceSuffix(plan.isOneTime)}
+                  {priceSuffix(plan.isOneTime, billing)}
                 </Text>
               </Flex>
 

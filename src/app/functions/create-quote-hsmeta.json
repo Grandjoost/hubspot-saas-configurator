@@ -3,6 +3,6 @@
   "type": "app-function",
   "config": {
     "entrypoint": "/app/functions/create-quote.js",
-    "secretKeys": ["HUBSPOT_QUOTE_TEMPLATE_ID", "HUBSPOT_PORTAL_ID"]
+    "secretKeys": ["HUBSPOT_QUOTE_TEMPLATE_ID"]
   }
 }

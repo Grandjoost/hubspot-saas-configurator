@@ -14,12 +14,13 @@ import {
   TableRow,
 } from '@hubspot/ui-extensions';
 import type { CatalogItem, SelectedAddOns } from './types';
-import { formatPrice, priceSuffix } from './format';
+import { effectivePrice, formatPrice, priceSuffix, type Billing } from './format';
 
 interface Props {
   items: CatalogItem[];
   selected: SelectedAddOns;
   currency: string;
+  billing: Billing;
   onToggle: (itemId: string, on: boolean) => void;
   onQtyChange: (itemId: string, qty: number) => void;
 }
@@ -28,6 +29,7 @@ export function AddOnPicker({
   items,
   selected,
   currency,
+  billing,
   onToggle,
   onQtyChange,
 }: Props) {
@@ -72,10 +74,13 @@ export function AddOnPicker({
                   <TableCell align="right">
                     <Flex direction="column" align="end">
                       <Text format={{ fontWeight: 'bold' }}>
-                        {formatPrice(item.unitPrice, currency)}
+                        {formatPrice(
+                          effectivePrice(item.unitPrice, item.isOneTime, billing),
+                          currency
+                        )}
                       </Text>
                       <Text format={{ color: 'medium' }}>
-                        {priceSuffix(item.isOneTime)}
+                        {priceSuffix(item.isOneTime, billing)}
                       </Text>
                     </Flex>
                   </TableCell>
