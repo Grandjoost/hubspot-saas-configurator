@@ -17,10 +17,11 @@
 
 const axios = require('axios');
 // NOTE: this catalog must stay in sync with src/app/cards/catalog.json.
-// HubSpot's card and function bundlers each refuse imports from outside
-// their own directory, so the JSON has to live in both places. A CI sync
-// check is a sensible follow-up.
-const catalog = require('./catalog.json');
+// HubSpot's card bundler refuses parent-dir imports, and the function
+// bundler doesn't pull in stray .json files — so the catalog lives in
+// two places, and the function-side copy is a .js module with the same
+// data verbatim. A CI sync-check is a sensible follow-up.
+const catalog = require('./catalog');
 
 const HS_API = 'https://api.hubapi.com';
 

@@ -89,10 +89,10 @@ Open a **Deal record** that has at least one contact associated → the **"SaaS 
 
 ## Customizing the catalog
 
-The wizard reads its data from `catalog.json`, which lives in **two places** because HubSpot bundles the card and the function separately and neither bundler accepts imports from outside its own directory:
+The catalog lives in **two places** because HubSpot's card bundler refuses parent-dir imports and the function bundler doesn't pull in stray `.json` files:
 
-- [src/app/cards/catalog.json](src/app/cards/catalog.json) — consumed by the React extension for display
-- [src/app/functions/catalog.json](src/app/functions/catalog.json) — consumed by the serverless function for the canonical price computation
+- [src/app/cards/catalog.json](src/app/cards/catalog.json) — consumed by the React extension for display (JSON, TypeScript imports it natively).
+- [src/app/functions/catalog.js](src/app/functions/catalog.js) — consumed by the serverless function for the canonical price computation (CommonJS module wrapping the same data verbatim).
 
 **Keep them in sync** when changing the catalog. (A CI sync-check is a sensible follow-up PR.)
 
@@ -139,7 +139,7 @@ hubspot-saas-configurator/
         ├── functions/
         │   ├── create-quote.js                   ← creates the CPQ quote + line items
         │   ├── create-quote-hsmeta.json          ← declares secret keys
-        │   ├── catalog.json                      ← server-side copy (must match cards/catalog.json)
+        │   ├── catalog.js                        ← server-side copy (must match cards/catalog.json)
         │   ├── list-templates.js                 ← fetches CPQ templates for the dropdown
         │   ├── list-templates-hsmeta.json
         │   └── package.json

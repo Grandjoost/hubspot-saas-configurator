@@ -1,4 +1,4 @@
-{
+module.exports = {
   "currency": "USD",
   "_note": "Sample SaaS catalog for the demo. Pricing is illustrative — replace with your own SKUs.",
   "plans": [
@@ -244,4 +244,4 @@
       "isOneTime": false
     }
   ]
-}
+};
