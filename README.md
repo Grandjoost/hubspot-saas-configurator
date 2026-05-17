@@ -46,9 +46,9 @@ This deploys the app, the React extension, and two serverless functions. The CRM
 
 ### 3. Install the app
 
-Because the app is declared as `distribution: private`, it is installed from the **developer area** of your HubSpot portal — not from Marketplace or Connected-Apps:
+Because the app is declared as `distribution: private`, it is installed from the **Development** area of your HubSpot portal — not from Marketplace or Connected-Apps:
 
-1. Open the **Developer** area in HubSpot (the same portal where `hs project upload` deployed to).
+1. Open the **Development** menu in HubSpot (the same portal where `hs project upload` deployed to).
 2. Go to **Projects → `hubspot-saas-configurator`**.
 3. In the component list, click the app UID (`hubspot_saas_configurator_app`).
 4. Open the **Distribution** tab.
