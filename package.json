@@ -1,0 +1,12 @@
+{
+  "name": "hubspot-saas-configurator",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Open-source HubSpot UI Extension: SaaS product configurator on the Deal record. Top-level project — see src/app/ for the actual project.",
+  "scripts": {
+    "sync-catalog": "node scripts/sync-catalog.mjs",
+    "sync-catalog:check": "node scripts/sync-catalog.mjs --check",
+    "upload": "npm run sync-catalog && hs project upload"
+  }
+}

@@ -43,8 +43,10 @@ cd hubspot-saas-configurator
 ### 2. Upload
 
 ```sh
-hs project upload
+npm run upload
 ```
+
+That wrapper runs [scripts/sync-catalog.mjs](scripts/sync-catalog.mjs) first (regenerates the inlined catalog block in `create-quote.js` from the canonical `cards/catalog.json`), then `hs project upload`. Use the wrapper rather than `hs project upload` directly so the serverless function never deploys with stale data — see [Catalog: single source via build script](#catalog-single-source-via-build-script) below.
 
 This deploys the app, the React extension, and two serverless functions. The CRM scopes declared in [src/app/app-hsmeta.json](src/app/app-hsmeta.json) are granted to the app on install — its access token is auto-injected into the serverless functions via `process.env.PRIVATE_APP_ACCESS_TOKEN`. **No separate Private App setup needed.**
 
@@ -89,12 +91,7 @@ Open a **Deal record** that has at least one contact associated → the **"SaaS 
 
 ## Customizing the catalog
 
-The catalog lives in **two places** because HubSpot's bundlers have asymmetric limits — the card bundler refuses parent-dir imports, and the function bundler ships only the entrypoint plus `node_modules` (no adjacent `.js` or `.json` siblings):
-
-- [src/app/cards/catalog.json](src/app/cards/catalog.json) — consumed by the React extension for display (TypeScript imports it natively).
-- The same data is **inlined as a `const catalog = {...}` block** at the top of [src/app/functions/create-quote.js](src/app/functions/create-quote.js) — the canonical price authority for quote creation.
-
-**Keep them in sync** when changing the catalog. (A CI sync-check is a sensible follow-up PR.)
+The catalog has **one canonical source** — [src/app/cards/catalog.json](src/app/cards/catalog.json) — and a tiny build step injects it into the serverless function before each deploy. See [Catalog: single source via build script](#catalog-single-source-via-build-script) for the why and how.
 
 Shape:
 
@@ -102,6 +99,21 @@ Shape:
 - `items[]` — pool of included items + add-ons that plans reference by id. Use `isOneTime: true` for setup/training fees, `isQuantifiable: true` with `min/max/step` for stepper-driven add-ons (e.g. seats).
 
 Bigger ambitions? Replace the JSON import on both sides with a call to the HubSpot Products API or a HubDB table.
+
+## Catalog: single source via build script
+
+The serverless function needs the catalog to recompute prices server-side (the trust-boundary fix), but HubSpot's app-function deployer ships **only the entrypoint `.js` file plus `node_modules`** — sibling `.json`/`.js` files referenced via `require()` are silently dropped, and the docs forbid `file:` dependencies for local packages. So sharing a single `catalog.json` across the card and the function isn't possible at runtime.
+
+The build script in [scripts/sync-catalog.mjs](scripts/sync-catalog.mjs) closes the gap:
+
+- Reads [src/app/cards/catalog.json](src/app/cards/catalog.json) — the **canonical** source.
+- Injects it as a `const catalog = {...}` block between sentinel comments in [src/app/functions/create-quote.js](src/app/functions/create-quote.js).
+- Runs automatically as part of `npm run upload`.
+- Has a `--check` mode that exits non-zero on drift, suitable for a CI step (`npm run sync-catalog:check`).
+
+If you change the catalog, edit only `cards/catalog.json` — the script keeps the function in lock-step. The sentinel block in `create-quote.js` is regenerated each run; never edit it by hand.
+
+> **Manual `hs project upload` skips this step** and will deploy stale catalog data into the function. Always use `npm run upload`, or wire the sync into a Git pre-commit hook if your team prefers that.
 
 ## Annual discount
 
@@ -131,23 +143,24 @@ From there, the sales rep takes over in the native CPQ editor: tweak discounts, 
 ```
 hubspot-saas-configurator/
 ├── hsproject.json
+├── package.json                                 ← root wrapper: `npm run upload`, sync-catalog scripts
 ├── README.md
 ├── LICENSE
+├── scripts/
+│   └── sync-catalog.mjs                         ← injects cards/catalog.json into create-quote.js
 └── src/
     └── app/
         ├── app-hsmeta.json                       ← app config (scopes, distribution)
         ├── functions/
-        │   ├── create-quote.js                   ← creates the CPQ quote + line items
+        │   ├── create-quote.js                   ← creates the CPQ quote; catalog is auto-injected
         │   ├── create-quote-hsmeta.json          ← declares secret keys
-        │   │                                       ↑ canonical catalog is inlined at the top of create-quote.js
-        │   │                                       (must match cards/catalog.json)
         │   ├── list-templates.js                 ← fetches CPQ templates for the dropdown
         │   ├── list-templates-hsmeta.json
         │   └── package.json
         └── cards/
             ├── product-configurator-hsmeta.json
             ├── product-configurator.tsx          ← React extension entry
-            ├── catalog.json                      ← client-side copy (must match functions/catalog.json)
+            ├── catalog.json                      ← ← canonical catalog, edit here
             ├── package.json
             └── components/
                 ├── PlanPicker.tsx
