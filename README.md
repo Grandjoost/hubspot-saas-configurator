@@ -31,7 +31,7 @@ Built as an open-source reference implementation for a pattern HubSpot itself re
 ### 1. Clone & install
 
 ```sh
-git clone https://github.com/noditch/hubspot-saas-configurator.git
+git clone https://github.com/Grandjoost/hubspot-saas-configurator.git
 cd hubspot-saas-configurator
 (cd src/app/cards && npm install)
 (cd src/app/functions && npm install)
@@ -62,18 +62,18 @@ Once installed, the app's private-app access token is automatically available to
 
 UI Extension cards are **not** auto-attached to records — you have to place them on a record view yourself:
 
-1. Go to **Settings → Data Management → Objects → Deals → Customize record**.
+1. Go to **Settings → Objects → Deals → Record customization**.
 2. Pick the view you want (Default view, or a team-specific view).
-3. Click **Add cards** on whichever tab you want the configurator to live on (existing or new).
-4. Find **"SaaS Configurator"** under the **App cards** section and toggle it on.
+3. Click the **Add cards** dropdown on the tab where the configurator should live.
+4. In the *Card types* panel, click **Apps**, then select **"SaaS Configurator"**.
 5. **Save**.
 
-(Alternatively, from any deal record, click the **Customize record** action in the top right of the middle column and add the card there.)
+(Alternatively, from any deal record, click **Customize tabs** at the top of the record and add the card from there.)
 
 ### 5. (Optional) Pin a default CPQ template
 
 ```sh
-hs project secret add HUBSPOT_QUOTE_TEMPLATE_ID
+hs secret add HUBSPOT_QUOTE_TEMPLATE_ID
 # paste the ID of the CPQ template you want new quotes to use by default
 ```
 
