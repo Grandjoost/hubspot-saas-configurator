@@ -102,7 +102,7 @@ Bigger ambitions? Replace the JSON import on both sides with a call to the HubSp
 
 ## Catalog: single source via build script
 
-The serverless function needs the catalog to recompute prices server-side (the trust-boundary fix), but HubSpot's app-function deployer ships **only the entrypoint `.js` file plus `node_modules`** — sibling `.json`/`.js` files referenced via `require()` are silently dropped, and the docs forbid `file:` dependencies for local packages. So sharing a single `catalog.json` across the card and the function isn't possible at runtime.
+The serverless function needs the catalog at runtime to rebuild prices itself — that's what makes the configured quote tamper-proof against a user who manipulates the React extension's payload from browser devtools (the *Server-side price authority* bullet at the top). But HubSpot's app-function deployer ships **only the entrypoint `.js` file plus `node_modules`** — sibling `.json`/`.js` files referenced via `require()` are silently dropped, and the docs forbid `file:` dependencies for local packages. So sharing a single `catalog.json` across the card and the function isn't possible at runtime.
 
 The build script in [scripts/sync-catalog.mjs](scripts/sync-catalog.mjs) closes the gap:
 
