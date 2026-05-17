@@ -26,6 +26,7 @@ Built as an open-source reference implementation for a pattern HubSpot itself re
 - Node.js 20+
 - [HubSpot CLI](https://developers.hubspot.com/docs/cms/developer-reference/local-development-cli) (`npm i -g @hubspot/cli`), authenticated against a dev portal (`hs auth`)
 - A HubSpot portal you can install apps in (developer test or sandbox)
+- **Platform version:** built on **Developer Platform 2026.03** (`platformVersion` in [hsproject.json](hsproject.json)) — this is the new project-based platform with `app-function` serverless, not the legacy Private Apps surface.
 
 ### 1. Clone & install
 
