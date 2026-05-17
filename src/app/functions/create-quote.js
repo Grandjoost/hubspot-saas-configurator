@@ -16,12 +16,87 @@
  */
 
 const axios = require('axios');
+
 // NOTE: this catalog must stay in sync with src/app/cards/catalog.json.
-// HubSpot's card bundler refuses parent-dir imports, and the function
-// bundler doesn't pull in stray .json files — so the catalog lives in
-// two places, and the function-side copy is a .js module with the same
-// data verbatim. A CI sync-check is a sensible follow-up.
-const catalog = require('./catalog');
+// HubSpot's function bundler ships ONLY the entrypoint file plus
+// node_modules — adjacent .json or .js files referenced via require()
+// are not bundled and fail at runtime with "Cannot find module". So the
+// canonical price authority is inlined here verbatim. A CI sync-check
+// between this object and cards/catalog.json is the right follow-up.
+const catalog = {
+  currency: 'USD',
+  plans: [
+    {
+      id: 'hub-starter',
+      name: 'Marketing Hub Starter',
+      description: 'Get started with email marketing and basic automation.',
+      unitPrice: 50,
+      isOneTime: false,
+      annualDiscount: 0.10,
+      defaultIncludedItemIds: ['seats-included-1', 'contacts-tier-1k', 'onboarding-essentials'],
+      compatibleAddOnIds: ['seats-extra', 'contacts-tier-up-2k', 'contacts-tier-up-5k', 'support-standard'],
+    },
+    {
+      id: 'hub-professional',
+      name: 'Marketing Hub Professional',
+      description: 'Advanced automation and multi-language content for scaling teams.',
+      unitPrice: 890,
+      isOneTime: false,
+      recommended: true,
+      annualDiscount: 0.15,
+      defaultIncludedItemIds: ['seats-included-3', 'contacts-tier-2k', 'onboarding-professional'],
+      compatibleAddOnIds: [
+        'seats-extra',
+        'contacts-tier-up-5k',
+        'contacts-tier-up-10k',
+        'support-standard',
+        'support-premium',
+        'training-power-user',
+      ],
+    },
+    {
+      id: 'hub-enterprise',
+      name: 'Marketing Hub Enterprise',
+      description: 'Custom objects, AI features, and dedicated CSM for enterprises.',
+      unitPrice: 3300,
+      isOneTime: false,
+      annualDiscount: 0.20,
+      defaultIncludedItemIds: ['seats-included-5', 'contacts-tier-10k', 'onboarding-enterprise', 'csm-dedicated'],
+      compatibleAddOnIds: [
+        'seats-extra',
+        'contacts-tier-up-25k',
+        'contacts-tier-up-50k',
+        'support-premium',
+        'training-power-user',
+        'training-admin',
+        'sso',
+      ],
+    },
+  ],
+  items: [
+    { id: 'seats-included-1', name: '1 Core Seat', description: 'Sales seat included in the plan', unitPrice: 0, isOneTime: false },
+    { id: 'seats-included-3', name: '3 Core Seats', description: 'Sales seats included in the plan', unitPrice: 0, isOneTime: false },
+    { id: 'seats-included-5', name: '5 Core Seats', description: 'Sales seats included in the plan', unitPrice: 0, isOneTime: false },
+    { id: 'seats-extra', name: 'Additional Core Seat', description: 'Per additional user', unitPrice: 45, isOneTime: false, isQuantifiable: true, minQty: 1, maxQty: 50, step: 1 },
+    { id: 'contacts-tier-1k', name: '1,000 marketing contacts', description: 'Plan default allocation', unitPrice: 0, isOneTime: false },
+    { id: 'contacts-tier-2k', name: '2,000 marketing contacts', description: 'Plan default allocation', unitPrice: 0, isOneTime: false },
+    { id: 'contacts-tier-10k', name: '10,000 marketing contacts', description: 'Plan default allocation', unitPrice: 0, isOneTime: false },
+    { id: 'contacts-tier-up-2k', name: '+2,000 Contacts', description: 'Extends the contact allocation', unitPrice: 50, isOneTime: false },
+    { id: 'contacts-tier-up-5k', name: '+5,000 Contacts', description: 'Extends the contact allocation', unitPrice: 110, isOneTime: false },
+    { id: 'contacts-tier-up-10k', name: '+10,000 Contacts', description: 'Extends the contact allocation', unitPrice: 200, isOneTime: false },
+    { id: 'contacts-tier-up-25k', name: '+25,000 Contacts', description: 'Extends the contact allocation', unitPrice: 450, isOneTime: false },
+    { id: 'contacts-tier-up-50k', name: '+50,000 Contacts', description: 'Extends the contact allocation', unitPrice: 850, isOneTime: false },
+    { id: 'onboarding-essentials', name: 'Essentials Onboarding', description: 'One-time, 2 weeks', unitPrice: 250, isOneTime: true },
+    { id: 'onboarding-professional', name: 'Professional Onboarding', description: 'One-time, 4–6 weeks', unitPrice: 3000, isOneTime: true },
+    { id: 'onboarding-enterprise', name: 'Enterprise Onboarding', description: 'One-time, 8–12 weeks, dedicated PM', unitPrice: 7500, isOneTime: true },
+    { id: 'csm-dedicated', name: 'Dedicated Customer Success Manager', description: 'Included with the Enterprise plan', unitPrice: 0, isOneTime: false },
+    { id: 'support-standard', name: 'Standard Support', description: '24/5 chat support', unitPrice: 0, isOneTime: false },
+    { id: 'support-premium', name: 'Premium Support', description: '24/7 phone + chat', unitPrice: 800, isOneTime: false },
+    { id: 'training-power-user', name: 'Power-User Training', description: 'Half-day live session', unitPrice: 1500, isOneTime: true, isQuantifiable: true, minQty: 1, maxQty: 10, step: 1 },
+    { id: 'training-admin', name: 'Admin Training', description: 'Full-day live session for admins', unitPrice: 2800, isOneTime: true },
+    { id: 'sso', name: 'Single Sign-On (SSO)', description: 'SAML 2.0 integration', unitPrice: 600, isOneTime: false },
+  ],
+};
 
 const HS_API = 'https://api.hubapi.com';
 

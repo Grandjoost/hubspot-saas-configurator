@@ -89,10 +89,10 @@ Open a **Deal record** that has at least one contact associated → the **"SaaS 
 
 ## Customizing the catalog
 
-The catalog lives in **two places** because HubSpot's card bundler refuses parent-dir imports and the function bundler doesn't pull in stray `.json` files:
+The catalog lives in **two places** because HubSpot's bundlers have asymmetric limits — the card bundler refuses parent-dir imports, and the function bundler ships only the entrypoint plus `node_modules` (no adjacent `.js` or `.json` siblings):
 
-- [src/app/cards/catalog.json](src/app/cards/catalog.json) — consumed by the React extension for display (JSON, TypeScript imports it natively).
-- [src/app/functions/catalog.js](src/app/functions/catalog.js) — consumed by the serverless function for the canonical price computation (CommonJS module wrapping the same data verbatim).
+- [src/app/cards/catalog.json](src/app/cards/catalog.json) — consumed by the React extension for display (TypeScript imports it natively).
+- The same data is **inlined as a `const catalog = {...}` block** at the top of [src/app/functions/create-quote.js](src/app/functions/create-quote.js) — the canonical price authority for quote creation.
 
 **Keep them in sync** when changing the catalog. (A CI sync-check is a sensible follow-up PR.)
 
@@ -139,7 +139,8 @@ hubspot-saas-configurator/
         ├── functions/
         │   ├── create-quote.js                   ← creates the CPQ quote + line items
         │   ├── create-quote-hsmeta.json          ← declares secret keys
-        │   ├── catalog.js                        ← server-side copy (must match cards/catalog.json)
+        │   │                                       ↑ canonical catalog is inlined at the top of create-quote.js
+        │   │                                       (must match cards/catalog.json)
         │   ├── list-templates.js                 ← fetches CPQ templates for the dropdown
         │   ├── list-templates-hsmeta.json
         │   └── package.json
