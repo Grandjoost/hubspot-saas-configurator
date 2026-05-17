@@ -65,7 +65,7 @@ UI Extension cards are **not** auto-attached to records — you have to place th
 1. Go to **Settings → Data Management → Objects → Deals → Customize record**.
 2. Pick the view you want (Default view, or a team-specific view).
 3. Click **Add cards** on whichever tab you want the configurator to live on (existing or new).
-4. Find **"Product Configurator"** under the **App cards** section and toggle it on.
+4. Find **"SaaS Configurator"** under the **App cards** section and toggle it on.
 5. **Save**.
 
 (Alternatively, from any deal record, click the **Customize record** action in the top right of the middle column and add the card there.)
@@ -81,7 +81,7 @@ You can find the ID by opening the extension after step 4 — the template dropd
 
 ### 6. Try it
 
-Open a **Deal record** that has at least one contact associated → the **"Product Configurator"** card appears on the tab you placed it on. Walk the wizard, toggle annual billing if you like, click **"Make a quote in HubSpot"** — a draft Quote opens in the CPQ editor.
+Open a **Deal record** that has at least one contact associated → the **"SaaS Configurator"** card appears on the tab you placed it on. Walk the wizard, toggle annual billing if you like, click **"Make a quote in HubSpot"** — a draft Quote opens in the CPQ editor.
 
 > **Note on regions:** the success-state "Open quote" link defaults to `app-eu1.hubspot.com`. If you run on a US portal, change the host to `app.hubspot.com` in [src/app/cards/product-configurator.tsx](src/app/cards/product-configurator.tsx) where the URL is built.
 
