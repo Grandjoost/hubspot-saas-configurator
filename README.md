@@ -44,9 +44,18 @@ hs project upload
 
 This deploys the app, the React extension, and two serverless functions. The CRM scopes declared in [src/app/app-hsmeta.json](src/app/app-hsmeta.json) are granted to the app on install — its access token is auto-injected into the serverless functions via `process.env.PRIVATE_APP_ACCESS_TOKEN`. **No separate Private App setup needed.**
 
-### 3. Install the app in your portal
+### 3. Install the app from the developer account
 
-In HubSpot: **Settings → Integrations → Connected Apps → [your app] → Install**. Approve the requested scopes.
+Because the app is declared as `distribution: private`, it is **not** installed from the destination portal's Marketplace or Connected-Apps page — it is installed from inside the **developer account** the project was uploaded to:
+
+1. In HubSpot's top-right account switcher, switch into your **developer account** (the one `hs project upload` targets).
+2. In the left sidebar, click **Projects → `hubspot-saas-configurator`**.
+3. In the component list, click the app UID (`hubspot_saas_configurator_app`).
+4. Open the **Distribution** tab.
+5. Under **Standard install**, click **Install now** → tick the "authorize installing an unverified app" checkbox → **Connect app**.
+6. To install onto a **developer test account** instead of the dev account itself, click **Add test install(s)** on the same tab and pick the test account.
+
+Once installed, the app's private-app access token is automatically available to the serverless functions as `PRIVATE_APP_ACCESS_TOKEN`.
 
 ### 4. Add the card to the Deal record layout
 
