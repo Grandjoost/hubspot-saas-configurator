@@ -4,7 +4,7 @@
 
 Built as an open-source reference implementation for a pattern HubSpot itself recommends: customers keep their own configuration UX, HubSpot CPQ takes over for discounting, approvals, governance, and e-signature.
 
-**Maintainer:** [noditch GmbH](https://noditch.de) — joost@noditch.de
+**Maintainer:** [noditch GmbH](https://www.noditch.de) — joost@noditch.de
 **License:** MIT
 
 ---
@@ -179,4 +179,4 @@ Inspired by HubSpot's push for open-source product configurator demos that Solut
 
 ---
 
-**Built by [noditch GmbH](https://noditch.de)** — Knowledge-Transfer-Beratung für Tool-Stacks (HubSpot, Atlassian, custom). Open-source, MIT-licensed.
+**Built by [noditch GmbH](https://www.noditch.de)** — Knowledge-Transfer-Beratung für Tool-Stacks (HubSpot, Atlassian, custom). Open-source, MIT-licensed.
