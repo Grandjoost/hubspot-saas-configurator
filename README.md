@@ -44,22 +44,34 @@ hs project upload
 
 This deploys the app, the React extension, and two serverless functions. The CRM scopes declared in [src/app/app-hsmeta.json](src/app/app-hsmeta.json) are granted to the app on install — its access token is auto-injected into the serverless functions via `process.env.PRIVATE_APP_ACCESS_TOKEN`. **No separate Private App setup needed.**
 
-### 3. Install the app
+### 3. Install the app in your portal
 
-In HubSpot: **Settings → Integrations → Connected Apps → [your app] → Install**.
+In HubSpot: **Settings → Integrations → Connected Apps → [your app] → Install**. Approve the requested scopes.
 
-### 4. (Optional) Pin a default CPQ template
+### 4. Add the card to the Deal record layout
+
+UI Extension cards are **not** auto-attached to records — you have to place them on a record view yourself:
+
+1. Go to **Settings → Data Management → Objects → Deals → Customize record**.
+2. Pick the view you want (Default view, or a team-specific view).
+3. Click **Add cards** on whichever tab you want the configurator to live on (existing or new).
+4. Find **"Product Configurator"** under the **App cards** section and toggle it on.
+5. **Save**.
+
+(Alternatively, from any deal record, click the **Customize record** action in the top right of the middle column and add the card there.)
+
+### 5. (Optional) Pin a default CPQ template
 
 ```sh
 hs project secret add HUBSPOT_QUOTE_TEMPLATE_ID
 # paste the ID of the CPQ template you want new quotes to use by default
 ```
 
-You can find the ID by deploying the project and then opening the extension — the template dropdown lists all CPQ templates in your portal with their IDs. If the secret is unset, the dropdown defaults to the first available template.
+You can find the ID by opening the extension after step 4 — the template dropdown lists all CPQ templates in your portal with their IDs. If the secret is unset, the dropdown defaults to the first available template.
 
-### 5. Try it
+### 6. Try it
 
-Open any **Deal record** that has at least one contact associated → the **"SaaS Configurator"** card appears as a tab. Walk the wizard, toggle annual billing if you like, click **"Make a quote in HubSpot"** — a draft Quote opens in the CPQ editor.
+Open a **Deal record** that has at least one contact associated → the **"Product Configurator"** card appears on the tab you placed it on. Walk the wizard, toggle annual billing if you like, click **"Make a quote in HubSpot"** — a draft Quote opens in the CPQ editor.
 
 > **Note on regions:** the success-state "Open quote" link defaults to `app-eu1.hubspot.com`. If you run on a US portal, change the host to `app.hubspot.com` in [src/app/cards/product-configurator.tsx](src/app/cards/product-configurator.tsx) where the URL is built.
 
