@@ -2,7 +2,7 @@
 
 > An open-source **HubSpot UI Extension** that embeds a guided product configurator on the Deal record. Sales reps walk a 3-step wizard — **plan → add-ons → review** — toggle monthly vs. annual billing, and push a draft CPQ quote into HubSpot with one click.
 
-Built as a reference implementation for the pattern Ethan @ HubSpot described: customers keep their own configuration UX, HubSpot CPQ takes over for discounting, approvals, governance, and e-signature.
+Built as an open-source reference implementation for a pattern HubSpot itself recommends: customers keep their own configuration UX, HubSpot CPQ takes over for discounting, approvals, governance, and e-signature.
 
 **Maintainer:** [noditch GmbH](https://noditch.de) — joost@noditch.de
 **License:** MIT
@@ -153,7 +153,7 @@ This is a reference implementation — fork it, adapt it, ship your own. If you 
 
 ## Acknowledgements
 
-Inspired by [Ethan @ HubSpot's](https://hubspot.com) call for open-source product configurator demos that HubSpot's Solutions Consultants can show to enterprise prospects.
+Inspired by HubSpot's push for open-source product configurator demos that Solutions Consultants can show to prospects — and by the new Custom Quote Modules + UI Extensions surfaces that make this kind of integration viable in the first place.
 
 ---
 
